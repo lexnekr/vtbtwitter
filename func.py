@@ -23,7 +23,7 @@ def limit_handled(cursor):
 #Поиск и возврат ID твиттов
 def tw_search(api, q, count = 20):
     idlist = []
-    for tweet in limit_handled(tweepy.Cursor(api.search, q='vtbrussia.ru', count = 20).items()):
+    for tweet in limit_handled(tweepy.Cursor(api.search, q, count = 20).items()):
         idlist.append(tweet.id)
     return idlist
 #Поиск и возврат ID твиттов
@@ -37,7 +37,7 @@ import urllib.request
 
 
 #Создание БД для твиттов
-def createbd(connect, name, recreate = False):
+def createbd(connect, name, recreate = False, url = False):
     c = connect.cursor()
     try:
         if recreate == True:
@@ -45,13 +45,20 @@ def createbd(connect, name, recreate = False):
         c.execute('''CREATE TABLE ''' + name + ''' (twid INTEGER NOT NULL UNIQUE PRIMARY KEY,
                                         twtext TEXT,
                                         date TEXT,
-                                        expanded_url TEXT,
+                                        expanded_url INTEGER,
+                                        real_expanded_url INTEGER,
                                         author_screen_name TEXT,
                                         section TEXT,
                                         retweet_count INTEGER,
                                         favorite_count INTEGER,
                                         fullinfo BOOLEAN);''')
         connect.commit()
+        
+        if url == True:
+            if recreate == True:
+                c.execute('DROP TABLE IF EXISTS url;')
+            c.execute('''CREATE TABLE url (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
+                                            src TEXT UNIQUE);''')
     except:
         print('Ошибка создания таблицы')
 #Создание БД для твиттов
@@ -120,17 +127,22 @@ def tw_info_add(api, idlist, connect, dbname, qr="&quot;", domain=False):
                     ex_url = i._json['entities']['urls'][0]['expanded_url']
                 except:
                     ex_url = i._json['retweeted_status']['entities']['urls'][0]['expanded_url']
+                c.execute('INSERT OR IGNORE INTO url (src) VALUES ( ? )', ( ex_url, ) )
+                connect.commit()
+                c.execute('SELECT id FROM url WHERE src=? LIMIT 1', ( ex_url, ))
+                ex_url_id = c.fetchone()[0]
                 twtext = i.text.replace('"', qr) #Если текст твита содержит двойные кавчки, они заменяются на значение из параметра qr
                 sql = '''UPDATE ''' + dbname + ''' SET
                         twtext="''' + twtext + '''",
                         date="''' + str(i.created_at) + '''",
-                        expanded_url="''' + ex_url + '''",
+                        expanded_url="''' + str(ex_url_id) + '''",
                         author_screen_name="''' + i.author.screen_name + '''",
                         retweet_count=''' + str(i.retweet_count) + ''',
                         favorite_count=''' + str(i.favorite_count) + '''
 
                         WHERE twid=''' + str(i.id) + ''';'''
                 c.execute(sql)
+                connect.commit()
                 try:
                     #Попытка определить корневой раздел сайта по ссылке из твитта
                     section = find_url_section(ex_url, domain)
@@ -139,11 +151,11 @@ def tw_info_add(api, idlist, connect, dbname, qr="&quot;", domain=False):
                     fullinfo=1 
                     WHERE twid='''+ str(i.id) + ''';'''
                     c.execute(sql)
+                    connect.commit()
                     #Попытка определить корневой раздел сайта по ссылке из твитта
                     #Если попытка удалась, информация о твитте считается полной
                 except:
                     print ('Не удалось запросить внедний адрес для получения раздела сайта по URL')
-                connect.commit()
             except:
                 print ('Ошибка!!! Не залочена ли БД?\n TwitterId = ' + str(i.id))
 #Добавление полной twitter информации в БД по поиску Twitter API для списка ID
@@ -158,22 +170,35 @@ import matplotlib.pyplot as plt
 
 
 #Построение диаграмм твитов по дня (круговая/гистограмма)
-def graph_tw_days_full(connect, dbname, pie = True, bar = True, sectionbar = True):
+def graph_tw_days_full(connect, dbname, pie = True, bar = True, sectionbar = True, dtwsectlabels = False):
     c = connect.cursor()
     sql = "SELECT date, section FROM " + dbname
     res = c.execute(sql)
     twnum = [0, 0, 0, 0, 0, 0, 0]
-    twnumsect = []
     twsections = {}
-    twsectlabels = []
+    twnumsect = []
+    if dtwsectlabels != False:
+        twsectlabels = dtwsectlabels
+        twsectlabels.extend(["Other"])
+        for i in range(len(twsectlabels)):
+            twsections[twsectlabels[i]]=i
+            twnumsect.append([0, 0, 0, 0, 0, 0, 0])
+    else:
+        twsectlabels = []
     for tw in res.fetchall():
         colnum = datetime.strptime(tw[0], "%Y-%m-%d %H:%M:%S").weekday()
         twnum[colnum] += 1
-        if (twsections.get(tw[1],-1) == -1):
-            twsections[tw[1]] = len(twsections)
-            twnumsect.append([0, 0, 0, 0, 0, 0, 0])
-            twsectlabels.append(tw[1])
-        twnumsect[twsections[tw[1]]][colnum]+=1
+        if dtwsectlabels == False:
+            if (twsections.get(tw[1],-1) == -1):
+                twsections[tw[1]] = len(twsections)
+                twnumsect.append([0, 0, 0, 0, 0, 0, 0])
+                twsectlabels.append(tw[1])
+            twnumsect[twsections[tw[1]]][colnum]+=1
+        else:
+            if (twsections.get(tw[1],-1) == -1):
+                twnumsect[twsections["Other"]][colnum] += 1
+            else:
+                twnumsect[twsections[tw[1]]][colnum] += 1
             
 
     GNUM = int(pie) + int(bar) + int(sectionbar)
@@ -201,15 +226,12 @@ def graph_tw_days_full(connect, dbname, pie = True, bar = True, sectionbar = Tru
         ax2.set_xticks([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5])
         
     if sectionbar == True:
-        print (twsections)
-        print (twnumsect)
-        print (twsectlabels)
         ax3 = fig.add_subplot(coordinats[i])
         i+=1
         width = 1/(len(twsections)+1)
         ax3.set_xticklabels(['Mo', 'Tu ', 'We', 'Th', 'Fr', 'Sa', 'Su'])
         ax3.set_xticks([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5])
-        c = ["#0398fe", "#7C7A9C", "black", "#d84a91", "#01c1c3"]
+        c = ["#0398fe", "#d84a91", "#01c1c3", "#7C7A9C", "black", "yellowgreen", "gold"]
         for i in range(len(twsections)):
             ax3.bar([0+width*i,1+width*i,2+width*i,3+width*i,4+width*i,5+width*i,6+width*i],
                     twnumsect[i], width, color=c[i], label=twsectlabels[i])
