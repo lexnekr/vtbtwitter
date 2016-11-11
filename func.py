@@ -85,17 +85,17 @@ def addTwIdtoDB(connect, name, twidlist):
 
 
 #Поиск твиттов по запросу через API и добавление списка новых ИД твиттов в БД
-def tw_search_and_add(api, q, connect, dbname,  count = 20, pres = False, returnlist = False):
+def tw_search_and_add(api, q, connect, tdname,  count = 20, pres = False, returnlist = False):
     idlist = []
     c = connect.cursor()
     for tweet in limit_handled(tweepy.Cursor(api.search, q='vtbrussia.ru', count = 20).items()):
-        result = c.execute('SELECT twid FROM ' + dbname + ' WHERE twid = ' + str(tweet.id) + ';').fetchone()
+        result = c.execute('SELECT twid FROM ' + tdname + ' WHERE twid = ' + str(tweet.id) + ';').fetchone()
         if result == None:
             idlist.append(tweet.id)
         else:
             break
     if idlist != []:
-        addTwIdtoDB(connect, dbname, idlist)
+        addTwIdtoDB(connect, tdname, idlist)
     if pres == True:
         print ('Добавлено ', str(len(idlist)), ' новых твиттов')
     if returnlist == True:
@@ -116,7 +116,7 @@ def find_url_section(ex_url, domain):
 
 
 #Добавление полной twitter информации в БД по поиску Twitter API для списка ID
-def tw_info_add(api, idlist, connect, dbname, qr="&quot;", domain=False):
+def tw_info_add(api, idlist, connect, tdname, qr="&quot;", domain=False):
     c = connect.cursor()
     count = len(idlist)//100 + 1
     for j in range(count):
@@ -132,7 +132,7 @@ def tw_info_add(api, idlist, connect, dbname, qr="&quot;", domain=False):
                 c.execute('SELECT id FROM url WHERE src=? LIMIT 1', ( ex_url, ))
                 ex_url_id = c.fetchone()[0]
                 twtext = i.text.replace('"', qr) #Если текст твита содержит двойные кавчки, они заменяются на значение из параметра qr
-                sql = '''UPDATE ''' + dbname + ''' SET
+                sql = '''UPDATE ''' + tdname + ''' SET
                         twtext="''' + twtext + '''",
                         date="''' + str(i.created_at) + '''",
                         expanded_url="''' + str(ex_url_id) + '''",
@@ -146,7 +146,7 @@ def tw_info_add(api, idlist, connect, dbname, qr="&quot;", domain=False):
                 try:
                     #Попытка определить корневой раздел сайта по ссылке из твитта
                     section = find_url_section(ex_url, domain)
-                    sql = '''UPDATE ''' + dbname + ''' SET
+                    sql = '''UPDATE ''' + tdname + ''' SET
                     section="''' + section + '''",
                     fullinfo=1 
                     WHERE twid='''+ str(i.id) + ''';'''
@@ -170,9 +170,9 @@ import matplotlib.pyplot as plt
 
 
 #Построение диаграмм твитов по дня (круговая/гистограмма)
-def graph_tw_days_full(connect, dbname, pie = True, bar = True, sectionbar = True, dtwsectlabels = False):
+def graph_tw_days_full(connect, tdname, pie = True, bar = True, sectionbar = True, dtwsectlabels = False):
     c = connect.cursor()
-    sql = "SELECT date, section FROM " + dbname
+    sql = "SELECT date, section FROM " + tdname
     res = c.execute(sql)
     twnum = [0, 0, 0, 0, 0, 0, 0]
     twsections = {}
