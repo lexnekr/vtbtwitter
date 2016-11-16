@@ -169,10 +169,31 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 
 
-#Построение диаграмм твитов по дня (круговая/гистограмма)
-def graph_tw_days_full(connect, tdname, pie = True, bar = True, sectionbar = True, dtwsectlabels = False):
+#Построение диаграмм твитов по дням (круговая/гистограмма)
+    #connect > подключение к БД (формат connect = sqlite3.connect('vtb.db'))
+    #tdname > имя таблицы с основными данными (строка)
+    #pie > вывод груговой диаграммы (True/False)
+    #bar > вывод гистограммы (True/False)
+    #sectionbar > вывод гистограммы с разбивкой по разделам (True/False)
+    #dtwsectlabels > список секций для гистограммы с разбивкой (формат dtwsectlabels = ['sport', 'culture', 'healthcare', 'tech']),
+        #необязательный параметр. При отстутствии выбирает разделы из данных. При наличии все твиты из разделов, отсутствующих
+        #в списке, будут занесены в "Other"
+    #f > фильтр (формат f = {'section':'sport', 'real_expanded_url':'165'}), используем имена колонок в БД
+def graph_tw_days_full(connect, tdname, pie = True, bar = True, sectionbar = True, dtwsectlabels = False, f = False):
     c = connect.cursor()
-    sql = "SELECT date, section FROM " + tdname
+    #Фильтр
+    where = ''
+    if f!=False:
+        where = ' WHERE '
+        i = 0
+        for key, value in f.items():
+            if i>0:
+                where += ' AND '
+            where += key + "='" + value + "'"
+            i+=1
+    #Фильтр
+            
+    sql = "SELECT date, section FROM " + tdname + where
     res = c.execute(sql)
     twnum = [0, 0, 0, 0, 0, 0, 0]
     twsections = {}
@@ -236,4 +257,71 @@ def graph_tw_days_full(connect, tdname, pie = True, bar = True, sectionbar = Tru
             ax3.bar([0+width*i,1+width*i,2+width*i,3+width*i,4+width*i,5+width*i,6+width*i],
                     twnumsect[i], width, color=c[i], label=twsectlabels[i])
             plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-#Построение диаграмм твитов по дня (круговая/гистограмма)
+#Построение диаграмм твитов по дням (круговая/гистограмма)
+
+
+#получение списка URL'ов сайта, отсортированным по частоте упоминания в твитах
+def get_list_top_urls(connect, tdname, count = True):
+    c=connect.cursor()
+
+    urls=c.execute('''select url.src
+                        from ''' + tdname + '''
+                        join url ON ''' + tdname + '''.real_expanded_url = url.id''')
+    d = {}
+    for url in urls:
+        if d.get(url[0], -1) == -1:
+            d[url[0]] = 1
+        else:
+            d[url[0]] += 1
+
+    #Сортировка по возрастанию
+    def selSort(d):
+        L = list(d.keys())
+        for i in range(len(L) - 1):
+            maxIndx = i
+            maxVal = d[L[i]]
+            j = i+1
+            while j < len(L):
+                if maxVal < d[L[j]]:
+                    maxIndx = j
+                    maxVal = d[L[j]]
+                j += 1
+            if maxIndx != i:
+                temp = L[i]
+                L[i] = L[maxIndx]
+                L[maxIndx] = temp
+        return L
+    #Сортировка по возрастанию
+
+    urls = selSort(d)
+
+    if count == True:
+        counts = []
+        for url in urls:
+            counts.append(d[url])
+        return (urls, counts)
+    else:
+        return (urls)
+#получение списка URL'ов сайта, отсортированным по частоте упоминания в твитах
+
+
+#Построение гистограммы частоты урлов по частоте упоминания в твитах, используя get_list_top_urls()
+def hist_top_urls(counts_top_urls, c = False):
+    if c == False or c > len(counts_top_urls[1]):
+        c = len(counts_top_urls[1])
+    x = counts_top_urls[1][:c]
+    fig = plt.figure(figsize=(16,5))
+    ax = fig.add_subplot(111)
+    ax.bar(range(len(x)), x)
+    plt.show()
+#Построение гистограммы частоты урлов по частоте упоминания в твитах, используя get_list_top_urls()
+    
+    
+#Печать списка URL'ов сайта, отсортированным по частоте упоминания в твитах, используя get_list_top_urls()
+def p_list_top_urls(list_top_urls, c = False):
+    if c == False or c > len(list_top_urls[0]):
+        c = len(list_top_urls[0])
+        
+    for i in range(c):
+        print (i, ' > ', list_top_urls[0][i], ' [', list_top_urls[1][i] ,']', sep = '')
+#Печать списка URL'ов сайта, отсортированным по частоте упоминания в твитах, используя get_list_top_urls()
