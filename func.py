@@ -260,19 +260,31 @@ def graph_tw_days_full(connect, tdname, pie = True, bar = True, sectionbar = Tru
 #Построение диаграмм твитов по дням (круговая/гистограмма)
 
 
-#получение списка URL'ов сайта, отсортированным по частоте упоминания в твитах
-def get_list_top_urls(connect, tdname, count = True):
-    c=connect.cursor()
-
-    urls=c.execute('''select url.src
+#Получение списка URL'ов оригинального сайта для каждого твита
+def get_tabel_of_urls(connect, tdname):
+    urls=connect.cursor().execute('''select url.src
                         from ''' + tdname + '''
                         join url ON ''' + tdname + '''.real_expanded_url = url.id''')
+    return urls
+#Получение списка URL'ов оригинального сайта для каждого твита
+
+
+#Получение списка авторов для каждого твита
+def get_tabel_of_authors(connect, tdname):
+    c=connect.cursor()
+    authors=c.execute('''select author_screen_name
+                        from ''' + tdname)
+    return authors
+#Получение списка авторов для каждого твита
+
+#Сортировка списка по возрастанию (авторов твитов, либо URL'ов)
+def sort_list(LIST, count = True, top = False):
     d = {}
-    for url in urls:
-        if d.get(url[0], -1) == -1:
-            d[url[0]] = 1
+    for element in LIST:
+        if d.get(element[0], -1) == -1:
+            d[element[0]] = 1
         else:
-            d[url[0]] += 1
+            d[element[0]] += 1
 
     #Сортировка по возрастанию
     def selSort(d):
@@ -292,36 +304,39 @@ def get_list_top_urls(connect, tdname, count = True):
                 L[maxIndx] = temp
         return L
     #Сортировка по возрастанию
+    
+    if top == False:
+        top = len(d)
 
-    urls = selSort(d)
+    LIST = selSort(d)[:top]
 
     if count == True:
         counts = []
-        for url in urls:
-            counts.append(d[url])
-        return (urls, counts)
+        for element in LIST:
+            counts.append(d[element])
+        return (LIST, counts)
     else:
-        return (urls)
-#получение списка URL'ов сайта, отсортированным по частоте упоминания в твитах
+        return (LIST)
+#Сортировка списка по возрастанию (авторов твитов, либо URL'ов)
 
-
-#Построение гистограммы частоты урлов по частоте упоминания в твитах, используя get_list_top_urls()
-def hist_top_urls(counts_top_urls, c = False):
-    if c == False or c > len(counts_top_urls[1]):
-        c = len(counts_top_urls[1])
-    x = counts_top_urls[1][:c]
+    
+#Построение гистограммы частоты упоминания в твитах, используя sort_list() для URL'ов или авторов
+def hist_top_list_elements(LIST, c = False):
+    if c == False or c > len(LIST[1]):
+        c = len(LIST[1])
+    x = LIST[1][:c]
     fig = plt.figure(figsize=(16,5))
     ax = fig.add_subplot(111)
     ax.bar(range(len(x)), x)
     plt.show()
-#Построение гистограммы частоты урлов по частоте упоминания в твитах, используя get_list_top_urls()
+#Построение гистограммы частоты упоминания в твитах, используя sort_list() для URL'ов или авторов
     
     
-#Печать списка URL'ов сайта, отсортированным по частоте упоминания в твитах, используя get_list_top_urls()
-def p_list_top_urls(list_top_urls, c = False):
-    if c == False or c > len(list_top_urls[0]):
-        c = len(list_top_urls[0])
+#Печать списка, отсортированного по частоте упоминания в твитах, используя sort_list() для URL'ов или авторов
+def print_top_list_elements(LIST, c = False):
+    if c == False or c > len(LIST[0]):
+        c = len(LIST[0])
         
     for i in range(c):
-        print (i, ' > ', list_top_urls[0][i], ' [', list_top_urls[1][i] ,']', sep = '')
-#Печать списка URL'ов сайта, отсортированным по частоте упоминания в твитах, используя get_list_top_urls()
+        print (i, ' > ', LIST[0][i], ' [', LIST[1][i] ,']', sep = '')
+#Печать списка, отсортированного по частоте упоминания в твитах, используя sort_list() для URL'ов или авторов
